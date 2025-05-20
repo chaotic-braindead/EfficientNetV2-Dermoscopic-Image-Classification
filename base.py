@@ -222,7 +222,7 @@ else:
         return predicted_class, actual_class
 
     # Train the model if not already trained
-    if not os.path.exists("best_model.pth"):
+    if os.path.exists("best_model.pth"):
         resp = input("retrain model? (y/n): ")
         if resp.lower() != "y":
             print("[INFO] Skipping training.")
