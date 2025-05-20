@@ -94,7 +94,7 @@ else:
     device = torch.device("cuda")
     print(f"[INFO] Using device: {device}")
 
-    model = timm.create_model("efficientnet_b0.ra_in1k", pretrained=True)
+    model = timm.create_model("tf_efficientnetv2_b0.in1k", pretrained=True)
     model.classifier = nn.Linear(model.classifier.in_features, 7)
     model = model.to(device)
 
