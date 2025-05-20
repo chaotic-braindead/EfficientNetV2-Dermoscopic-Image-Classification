@@ -223,8 +223,12 @@ else:
 
     # Train the model if not already trained
     if not os.path.exists("best_model.pth"):
-        print("[INFO] Starting training...")
-        train_model(model, train_loader, val_loader, epochs=10)
+        resp = input("retrain model? (y/n): ")
+        if resp.lower() != "y":
+            print("[INFO] Skipping training.")
+        else:
+            epochs = int(input("Enter number of epochs: "))
+            train_model(model, train_loader, val_loader, epochs=epochs)
 
     # Function to get random samples from test/val sets
     def get_random_samples(dataset="test", n_samples=5):
