@@ -1,3 +1,5 @@
+# EfficientNetV2 for Medical Dermoscopic Image Classification
+
 # Prerequisites:
 
 1. [CUDA](https://developer.nvidia.com/cuda-downloads)
