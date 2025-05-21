@@ -11,6 +11,8 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import timm
 import matplotlib.pyplot as plt
+import numpy as np
+import cv2
 
 # === Load and Prepare Metadata ===
 print("[INFO] Loading metadata...")
@@ -221,6 +223,68 @@ else:
 
         return predicted_class, actual_class
 
+    def generate_gradcam(model, image_path, class_idx=None):
+        model.eval()
+        image = Image.open(image_path).convert("RGB")
+        img_tensor = transform(image).unsqueeze(0).to(device)
+
+        # Hook into last convolutional layer
+        target_layer = model.blocks[-1][-1]
+        activations = []
+        gradients = []
+
+        def forward_hook(module, input, output):
+            activations.append(output)
+
+        def backward_hook(module, grad_in, grad_out):
+            gradients.append(grad_out[0])
+
+        forward_handle = target_layer.register_forward_hook(forward_hook)
+        backward_handle = target_layer.register_full_backward_hook(backward_hook)
+
+        output = model(img_tensor)
+        pred_class = output.argmax(dim=1).item() if class_idx is None else class_idx
+        df_to_use = test_df
+        actual_class = df_to_use[df_to_use["image_id"] == image_id]["dx"].values[0]
+        model.zero_grad()
+        output[0, pred_class].backward()
+
+        grads = gradients[0].detach().cpu()
+        acts = activations[0].detach().cpu()
+        pooled_grads = torch.mean(grads, dim=[0, 2, 3])
+        for i in range(acts.shape[1]):
+            acts[0, i, :, :] *= pooled_grads[i]
+        heatmap = acts[0].sum(dim=0)
+        heatmap = torch.relu(heatmap)
+        heatmap /= heatmap.max()
+
+        heatmap = transforms.ToPILImage()(heatmap.unsqueeze(0)).resize(
+            image.size, Image.Resampling.BILINEAR
+        )
+        heatmap = np.array(heatmap)
+        heatmap = np.uint8(255 * heatmap)
+
+        heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+        heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+        overlay = cv2.addWeighted(np.array(image), 0.5, heatmap, 0.5, 0)
+
+        plt.figure(figsize=(8, 8))
+        plt.imshow(overlay)
+        plt.axis("off")
+        plt.title(
+            f"Predicted: {le.inverse_transform([pred_class])[0]}\nActual: {actual_class}\nImage ID: {image_path.split('/')[-1]}"
+        )
+        plt.show()
+
+        forward_handle.remove()
+        backward_handle.remove()
+
+    # Function to get random samples from test/val sets
+    def get_random_samples(dataset="test", n_samples=5):
+        """Get random sample image IDs from test or validation set"""
+        df_to_use = test_df if dataset == "test" else val_df
+        return df_to_use["image_id"].sample(n=n_samples).tolist()
+
     # Train the model if not already trained
     if os.path.exists("best_model.pth"):
         resp = input("retrain model? (y/n): ")
@@ -229,12 +293,6 @@ else:
         else:
             epochs = int(input("Enter number of epochs: "))
             train_model(model, train_loader, val_loader, epochs=epochs)
-
-    # Function to get random samples from test/val sets
-    def get_random_samples(dataset="test", n_samples=5):
-        """Get random sample image IDs from test or validation set"""
-        df_to_use = test_df if dataset == "test" else val_df
-        return df_to_use["image_id"].sample(n=n_samples).tolist()
 
     # Load best model and evaluate on test set
     model.load_state_dict(torch.load("best_model.pth"))
@@ -247,6 +305,7 @@ else:
 
     for image_id in get_random_samples(dataset="test", n_samples=len(test_df)):
         predict_and_display(model, image_id, dataset="test")
+        generate_gradcam(model, f"HAM10000_images/{image_id}.jpg")
 
     # print(f"\nPredicted class: {result_pred}")
     # print(f"Actual class: {result_actual}")
