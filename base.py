@@ -101,6 +101,7 @@ else:
     model = model.to(device)
 
     criterion = nn.CrossEntropyLoss()
+
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
     def train_model(model, train_loader, val_loader, epochs=10):
@@ -207,7 +208,13 @@ else:
 
         with torch.no_grad():
             output = model(img_tensor)
+            probabilities = torch.nn.functional.softmax(output[0], dim=0)
             pred = output.argmax(1).item()
+
+        print("\nClass Probabilities:")
+        for idx, prob in enumerate(probabilities):
+            class_name = le.inverse_transform([idx])[0]
+            print(f"{class_name}: {prob.item():.4f}")
 
         predicted_class = le.inverse_transform([pred])[0]
         actual_class = df_to_use[df_to_use["image_id"] == image_id]["dx"].values[0]
@@ -221,7 +228,7 @@ else:
         )
         plt.show()
 
-        return predicted_class, actual_class
+        return predicted_class, actual_class, probabilities
 
     def generate_gradcam(model, image_path, class_idx=None):
         model.eval()
@@ -304,7 +311,7 @@ else:
     # )
 
     for image_id in get_random_samples(dataset="test", n_samples=len(test_df)):
-        predict_and_display(model, image_id, dataset="test")
+        p, a, prob = predict_and_display(model, image_id, dataset="test")
         generate_gradcam(model, f"HAM10000_images/{image_id}.jpg")
 
     # print(f"\nPredicted class: {result_pred}")
